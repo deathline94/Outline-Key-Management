@@ -152,7 +152,7 @@ list_keys() {
             DAYS_SINCE=$(( (CURRENT_TIMESTAMP - FIRST_USED_TIMESTAMP) / 86400 ))
             echo "$i) Key ID: $KEY_ID (First used: $FIRST_USED, $DAYS_SINCE days ago)"
         fi
- money       ((i++))
+        ((i++))
     done <<< "$KEYS"
     echo ""
 }
