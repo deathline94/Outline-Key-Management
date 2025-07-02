@@ -6,6 +6,7 @@ TRACKING_FILE="/opt/outline/key_tracking.json"
 LOG_FILE="/var/log/outline_key_expiration.log"
 CONTAINER_NAME="shadowbox"
 CRON_FILE="/etc/cron.d/outline-key-expiry"
+SCRIPT_PATH="/opt/outline/manager.sh"
 
 # Function to print characters with delay
 print_with_delay() {
@@ -27,7 +28,7 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 # Set up cron job for daily expiry check
 setup_cron() {
     if [ ! -f "$CRON_FILE" ]; then
-        echo "0 0 * * * /bin/bash $0 auto" > "$CRON_FILE"
+        echo "0 0 * * * /bin/bash $SCRIPT_PATH auto" > "$CRON_FILE"
         chmod 644 "$CRON_FILE"
         log "Cron job set up for daily key expiry check"
         echo "Cron job set up for daily key expiry check at midnight"
@@ -151,10 +152,19 @@ list_keys() {
             DAYS_SINCE=$(( (CURRENT_TIMESTAMP - FIRST_USED_TIMESTAMP) / 86400 ))
             echo "$i) Key ID: $KEY_ID (First used: $FIRST_USED, $DAYS_SINCE days ago)"
         fi
-        ((i++))
+ money       ((i++))
     done <<< "$KEYS"
     echo ""
 }
+
+# Save script locally if run remotely
+if [ "$0" = "/dev/stdin" ]; then
+    mkdir -p /opt/outline
+    curl -fsSL https://raw.githubusercontent.com/deathline94/Outline-Key-Management/main/manager.sh -o "$SCRIPT_PATH"
+    chmod +x "$SCRIPT_PATH"
+    log "Script saved locally to $SCRIPT_PATH"
+    echo "Script saved locally to $SCRIPT_PATH"
+fi
 
 # Check for auto mode (for cron)
 if [ "$1" = "auto" ]; then
