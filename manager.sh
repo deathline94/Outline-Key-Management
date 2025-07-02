@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Check for sudo privileges
+if [ "$EUID" -ne 0 ]; then
+    echo "This script must be run with sudo."
+    exit 1
+fi
+
 # File paths and container name
 CONFIG_FILE="/opt/outline/persisted-state/shadowbox_config.json"
 TRACKING_FILE="/opt/outline/key_tracking.json"
@@ -28,7 +34,7 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 # Set up cron job for daily expiry check
 setup_cron() {
     if [ ! -f "$CRON_FILE" ]; then
-        echo "0 0 * * * /bin/bash $SCRIPT_PATH auto" > "$CRON_FILE"
+        echo "0 0 * * * root /bin/bash $SCRIPT_PATH auto" > "$CRON_FILE"
         chmod 644 "$CRON_FILE"
         log "Cron job set up for daily key expiry check"
         echo "Cron job set up for daily key expiry check at midnight"
@@ -164,6 +170,7 @@ if [ "$0" = "/dev/stdin" ]; then
     chmod +x "$SCRIPT_PATH"
     log "Script saved locally to $SCRIPT_PATH"
     echo "Script saved locally to $SCRIPT_PATH"
+    exec /bin/bash "$SCRIPT_PATH" "$@"
 fi
 
 # Check for auto mode (for cron)
