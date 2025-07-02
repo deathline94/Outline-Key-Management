@@ -188,14 +188,12 @@ if [ ! -f "$SCRIPT_PATH" ]; then
         echo "Error: Failed to set permissions on $SCRIPT_PATH. Check $LOG_FILE."
         exit 1
     fi
-    if [ -f "$SCRIPT_PATH" ]; then
-        log "Script saved locally to $SCRIPT_PATH"
-        echo "Script saved locally to $SCRIPT_PATH"
-    else
+    if [ ! -f "$SCRIPT_PATH" ]; then
         log "Script not found at $SCRIPT_PATH after save attempt"
         echo "Error: Script not saved to $SCRIPT_PATH. Check $LOG_FILE."
         exit 1
     fi
+    log "Script saved locally to $SCRIPT_PATH"
 fi
 
 # Check for auto mode (for cron)
