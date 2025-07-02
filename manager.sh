@@ -14,6 +14,24 @@ CONTAINER_NAME="shadowbox"
 CRON_FILE="/etc/cron.d/outline-key-expiry"
 SCRIPT_PATH="/opt/outline/manager.sh"
 
+# Logging function
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
+
+# Check and install dependencies
+for pkg in jq docker; do
+    if ! command -v $pkg >/dev/null; then
+        echo "Installing $pkg..."
+        apt-get update
+        apt-get install -y $pkg.io 2>> "$LOG_FILE"
+        if [ $? -ne 0 ]; then
+            log "Failed to install $pkg"
+            echo "Error: Failed to install $pkg. Check $LOG_FILE."
+            exit 1
+        fi
+        log "Installed dependency: $pkg"
+    fi
+done
+
 # Function to print characters with delay
 print_with_delay() {
     text="$1"
@@ -27,9 +45,6 @@ print_with_delay() {
 
 # Ensure tracking file exists
 [ ! -f "$TRACKING_FILE" ] && echo '{"keys":{}}' > "$TRACKING_FILE"
-
-# Logging function
-log() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 
 # Set up cron job for daily expiry check
 setup_cron() {
@@ -166,11 +181,25 @@ list_keys() {
 # Save script locally if run remotely
 if [ "$0" = "/dev/stdin" ]; then
     mkdir -p /opt/outline
-    curl -fsSL https://raw.githubusercontent.com/deathline94/Outline-Key-Management/main/manager.sh -o "$SCRIPT_PATH"
-    chmod +x "$SCRIPT_PATH"
-    log "Script saved locally to $SCRIPT_PATH"
-    echo "Script saved locally to $SCRIPT_PATH"
-    exec /bin/bash "$SCRIPT_PATH" "$@"
+    if ! curl -fsSL https://raw.githubusercontent.com/deathline94/Outline-Key-Management/main/manager.sh -o "$SCRIPT_PATH" 2>> "$LOG_FILE"; then
+        log "Failed to download script to $SCRIPT_PATH"
+        echo "Error: Failed to download script to $SCRIPT_PATH. Check $LOG_FILE."
+        exit 1
+    fi
+    if ! chmod +x "$SCRIPT_PATH" 2>> "$LOG_FILE"; then
+        log "Failed to set executable permissions on $SCRIPT_PATH"
+        echo "Error: Failed to set permissions on $SCRIPT_PATH. Check $LOG_FILE."
+        exit 1
+    fi
+    if [ -f "$SCRIPT_PATH" ]; then
+        log "Script saved locally to $SCRIPT_PATH"
+        echo "Script saved locally to $SCRIPT_PATH"
+        exec /bin/bash "$SCRIPT_PATH" "$@"
+    else
+        log "Script not found at $SCRIPT_PATH after download attempt"
+        echo "Error: Script not saved to $SCRIPT_PATH. Check $LOG_FILE."
+        exit 1
+    fi
 fi
 
 # Check for auto mode (for cron)
