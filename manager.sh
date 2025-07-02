@@ -1,11 +1,5 @@
 #!/bin/bash
 
-# Check for sudo privileges
-if [ "$EUID" -ne 0 ]; then
-    echo "This script must be run with sudo."
-    exit 1
-fi
-
 # File paths and container name
 CONFIG_FILE="/opt/outline/persisted-state/shadowbox_config.json"
 TRACKING_FILE="/opt/outline/key_tracking.json"
@@ -20,9 +14,9 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 # Check and install dependencies
 for pkg in jq docker; do
     if ! command -v $pkg >/dev/null; then
-        echo "Installing $pkg..."
-        apt-get update
-        apt-get install -y $pkg.io 2>> "$LOG_FILE"
+        echo "Installing $pkg requires sudo..."
+        sudo apt-get update
+        sudo apt-get install -y $pkg.io 2>> "$LOG_FILE"
         if [ $? -ne 0 ]; then
             log "Failed to install $pkg"
             echo "Error: Failed to install $pkg. Check $LOG_FILE."
@@ -44,13 +38,13 @@ print_with_delay() {
 }
 
 # Ensure tracking file exists
-[ ! -f "$TRACKING_FILE" ] && echo '{"keys":{}}' > "$TRACKING_FILE"
+[ ! -f "$TRACKING_FILE" ] && sudo bash -c "echo '{\"keys\":{}}' > \"$TRACKING_FILE\""
 
 # Set up cron job for daily expiry check
 setup_cron() {
     if [ ! -f "$CRON_FILE" ]; then
-        echo "0 0 * * * root /bin/bash $SCRIPT_PATH auto" > "$CRON_FILE"
-        chmod 644 "$CRON_FILE"
+        sudo bash -c "echo '0 0 * * * root /bin/bash $SCRIPT_PATH auto' > \"$CRON_FILE\""
+        sudo chmod 644 "$CRON_FILE"
         log "Cron job set up for daily key expiry check"
         echo "Cron job set up for daily key expiry check at midnight"
     else
@@ -84,7 +78,7 @@ set_first_used() {
     FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
     if [ "$FIRST_USED" = "null" ]; then
         CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-        jq ".keys.\"$KEY_ID\" = {\"first_used\": \"$CURRENT_TIME\"}" "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"
+        sudo bash -c "jq \".keys.\\\"$KEY_ID\\\" = {\\\"first_used\\\": \\\"$CURRENT_TIME\\\"}\" \"$TRACKING_FILE\" > tmp.json && mv tmp.json \"$TRACKING_FILE\""
         echo "Key ID: $KEY_ID (Name: $KEY_NAME) set to first used at $CURRENT_TIME"
         log "Key ID: $KEY_ID (Name: $KEY_NAME) set to first used at $CURRENT_TIME"
     else
@@ -122,7 +116,7 @@ extend_key() {
         return
     fi
     CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-    jq ".keys.\"$KEY_ID\" = {\"first_used\": \"$CURRENT_TIME\"}" "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"
+    sudo bash -c "jq \".keys.\\\"$KEY_ID\\\" = {\\\"first_used\\\": \\\"$CURRENT_TIME\\\"}\" \"$TRACKING_FILE\" > tmp.json && mv tmp.json \"$TRACKING_FILE\""
     echo "Key ID: $KEY_ID (Name: $KEY_NAME) extended with new first used date: $CURRENT_TIME"
     log "Key ID: $KEY_ID (Name: $KEY_NAME) extended with new first used date: $CURRENT_TIME"
 }
@@ -144,9 +138,9 @@ delete_expired_keys() {
             DAYS_SINCE=$(( (CURRENT_TIMESTAMP - FIRST_USED_TIMESTAMP) / 86400 ))
             if [ $DAYS_SINCE -ge 30 ]; then
                 KEY_NAME=$(jq -r ".accessKeys[] | select(.id == \"$KEY_ID\") | .name" "$CONFIG_FILE")
-                jq "del(.accessKeys[] | select(.id == \"$KEY_ID\"))" "$CONFIG_FILE" > tmp.json && mv tmp.json "$CONFIG_FILE"
-                jq "del(.keys.\"$KEY_ID\")" "$TRACKING_FILE" > tmp.json && mv tmp.json "$TRACKING_FILE"
-                docker restart "$CONTAINER_NAME" >/dev/null 2>&1
+                sudo bash -c "jq \"del(.accessKeys[] | select(.id == \\\"$KEY_ID\\\"))\" \"$CONFIG_FILE\" > tmp.json && mv tmp.json \"$CONFIG_FILE\""
+                sudo bash -c "jq \"del(.keys.\\\"$KEY_ID\\\")\" \"$TRACKING_FILE\" > tmp.json && mv tmp.json \"$TRACKING_FILE\""
+                sudo docker restart "$CONTAINER_NAME" >/dev/null 2>&1
                 echo "Key ID: $KEY_ID (Name: $KEY_NAME) deleted after $DAYS_SINCE days"
                 log "Key ID: $KEY_ID (Name: $KEY_NAME) deleted after $DAYS_SINCE days"
             fi
@@ -182,14 +176,14 @@ list_keys() {
 }
 
 # Save script locally if run remotely
-if [ "$0" = "/dev/stdin" ]; then
+if [ ! -f "$SCRIPT_PATH" ]; then
     mkdir -p /opt/outline
-    if ! curl -fsSL https://raw.githubusercontent.com/deathline94/Outline-Key-Management/main/manager.sh -o "$SCRIPT_PATH" 2>> "$LOG_FILE"; then
-        log "Failed to download script to $SCRIPT_PATH"
-        echo "Error: Failed to download script to $SCRIPT_PATH. Check $LOG_FILE."
+    if ! curl -fsSL https://raw.githubusercontent.com/deathline94/Outline-Key-Management/main/manager.sh | sudo tee "$SCRIPT_PATH" >/dev/null 2>> "$LOG_FILE"; then
+        log "Failed to download and save script to $SCRIPT_PATH"
+        echo "Error: Failed to download and save script to $SCRIPT_PATH. Check $LOG_FILE."
         exit 1
     fi
-    if ! chmod +x "$SCRIPT_PATH" 2>> "$LOG_FILE"; then
+    if ! sudo chmod +x "$SCRIPT_PATH" 2>> "$LOG_FILE"; then
         log "Failed to set executable permissions on $SCRIPT_PATH"
         echo "Error: Failed to set permissions on $SCRIPT_PATH. Check $LOG_FILE."
         exit 1
@@ -197,9 +191,8 @@ if [ "$0" = "/dev/stdin" ]; then
     if [ -f "$SCRIPT_PATH" ]; then
         log "Script saved locally to $SCRIPT_PATH"
         echo "Script saved locally to $SCRIPT_PATH"
-        exec /bin/bash "$SCRIPT_PATH" "$@"
     else
-        log "Script not found at $SCRIPT_PATH after download attempt"
+        log "Script not found at $SCRIPT_PATH after save attempt"
         echo "Error: Script not saved to $SCRIPT_PATH. Check $LOG_FILE."
         exit 1
     fi
