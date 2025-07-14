@@ -57,27 +57,36 @@ setup_cron() {
 set_first_used() {
     echo ""
     echo "Available keys:"
-    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name' "$CONFIG_FILE" | cat -n)
+    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name + " " + (.id | tostring)' "$CONFIG_FILE")
     if [ -z "$KEYS" ]; then
         echo "No keys found."
         return
     fi
-    echo "$KEYS"
+    i=1
+    while IFS=' ' read -r KEY_NAME KEY_ID; do
+        if [ -n "$KEY_NAME" ]; then
+            FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
+            if [ "$FIRST_USED" = "null" ]; then
+                echo "$i) $KEY_NAME"
+            else
+                FIRST_USED_TIMESTAMP=$(date -d "$FIRST_USED" +%s)
+                CURRENT_TIMESTAMP=$(date +%s)
+                DAYS_SINCE=$(( (CURRENT_TIMESTAMP - FIRST_USED_TIMESTAMP) / 86400 ))
+                echo "$i) $KEY_NAME (First used: $FIRST_USED, $DAYS_SINCE days ago)"
+            fi
+            ((i++))
+        fi
+    done <<< "$KEYS"
     echo ""
     read -p "Enter key number to set first used (or 0 to cancel): " key_num
     if [ "$key_num" -eq 0 ]; then
         return
     fi
-    KEY_NAME=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $2}')
-    if [ -z "$KEY_NAME" ]; then
+    KEY_NAME=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $1}')
+    KEY_ID=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $2}')
+    if [ -z "$KEY_NAME" ] || [ -z "$KEY_ID" ]; then
         echo "Invalid key number."
         log "Error: Invalid key number $key_num"
-        return
-    fi
-    KEY_ID=$(jq -r ".accessKeys[] | select(.name == \"$KEY_NAME\") | .id" "$CONFIG_FILE")
-    if [ -z "$KEY_ID" ]; then
-        echo "Error: Key name $KEY_NAME not found."
-        log "Error: Key name $KEY_NAME not found"
         return
     fi
     FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
@@ -96,27 +105,36 @@ set_first_used() {
 extend_key() {
     echo ""
     echo "Available keys:"
-    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name' "$CONFIG_FILE" | cat -n)
+    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name + " " + (.id | tostring)' "$CONFIG_FILE")
     if [ -z "$KEYS" ]; then
         echo "No keys found."
         return
     fi
-    echo "$KEYS"
+    i=1
+    while IFS=' ' read -r KEY_NAME KEY_ID; do
+        if [ -n "$KEY_NAME" ]; then
+            FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
+            if [ "$FIRST_USED" = "null" ]; then
+                echo "$i) $KEY_NAME"
+            else
+                FIRST_USED_TIMESTAMP=$(date -d "$FIRST_USED" +%s)
+                CURRENT_TIMESTAMP=$(date +%s)
+                DAYS_SINCE=$(( (CURRENT_TIMESTAMP - FIRST_USED_TIMESTAMP) / 86400 ))
+                echo "$i) $KEY_NAME (First used: $FIRST_USED, $DAYS_SINCE days ago)"
+            fi
+            ((i++))
+        fi
+    done <<< "$KEYS"
     echo ""
     read -p "Enter key number to extend (or 0 to cancel): " key_num
     if [ "$key_num" -eq 0 ]; then
         return
     fi
-    KEY_NAME=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $2}')
-    if [ -z "$KEY_NAME" ]; then
+    KEY_NAME=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $1}')
+    KEY_ID=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $2}')
+    if [ -z "$KEY_NAME" ] || [ -z "$KEY_ID" ]; then
         echo "Invalid key number."
         log "Error: Invalid key number $key_num"
-        return
-    fi
-    KEY_ID=$(jq -r ".accessKeys[] | select(.name == \"$KEY_NAME\") | .id" "$CONFIG_FILE")
-    if [ -z "$KEY_ID" ]; then
-        echo "Error: Key name $KEY_NAME not found."
-        log "Error: Key name $KEY_NAME not found"
         return
     fi
     FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
