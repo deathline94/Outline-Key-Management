@@ -57,33 +57,38 @@ setup_cron() {
 set_first_used() {
     echo ""
     echo "Available keys:"
-    KEYS=$(jq -r '.accessKeys[] | "\(.id) \(.name)"' "$CONFIG_FILE" | cat -n)
+    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name' "$CONFIG_FILE" | cat -n)
     if [ -z "$KEYS" ]; then
         echo "No keys found."
         return
     fi
-    echo "$KEYS" | awk '{printf "%2d) ID: %-5s Name: %s\n", $1, $2, $3}'
+    echo "$KEYS"
     echo ""
     read -p "Enter key number to set first used (or 0 to cancel): " key_num
     if [ "$key_num" -eq 0 ]; then
         return
     fi
-    KEY_ID=$(jq -r '.accessKeys['$((key_num-1))'].id' "$CONFIG_FILE")
-    KEY_NAME=$(jq -r '.accessKeys['$((key_num-1))'].name' "$CONFIG_FILE")
-    if [ -z "$KEY_ID" ]; then
+    KEY_NAME=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $2}')
+    if [ -z "$KEY_NAME" ]; then
         echo "Invalid key number."
         log "Error: Invalid key number $key_num"
+        return
+    fi
+    KEY_ID=$(jq -r ".accessKeys[] | select(.name == \"$KEY_NAME\") | .id" "$CONFIG_FILE")
+    if [ -z "$KEY_ID" ]; then
+        echo "Error: Key name $KEY_NAME not found."
+        log "Error: Key name $KEY_NAME not found"
         return
     fi
     FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
     if [ "$FIRST_USED" = "null" ]; then
         CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
         sudo bash -c "jq \".keys.\\\"$KEY_ID\\\" = {\\\"first_used\\\": \\\"$CURRENT_TIME\\\"}\" \"$TRACKING_FILE\" > tmp.json && mv tmp.json \"$TRACKING_FILE\""
-        echo "Key ID: $KEY_ID (Name: $KEY_NAME) set to first used at $CURRENT_TIME"
-        log "Key ID: $KEY_ID (Name: $KEY_NAME) set to first used at $CURRENT_TIME"
+        echo "Key: $KEY_NAME set to first used at $CURRENT_TIME"
+        log "Key: $KEY_NAME set to first used at $CURRENT_TIME"
     else
-        echo "Key ID: $KEY_ID (Name: $KEY_NAME) already has first_used: $FIRST_USED"
-        log "Key ID: $KEY_ID (Name: $KEY_NAME) already has first_used: $FIRST_USED"
+        echo "Key: $KEY_NAME already has first_used: $FIRST_USED"
+        log "Key: $KEY_NAME already has first_used: $FIRST_USED"
     fi
 }
 
@@ -91,34 +96,39 @@ set_first_used() {
 extend_key() {
     echo ""
     echo "Available keys:"
-    KEYS=$(jq -r '.accessKeys[] | "\(.id) \(.name)"' "$CONFIG_FILE" | cat -n)
+    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name' "$CONFIG_FILE" | cat -n)
     if [ -z "$KEYS" ]; then
         echo "No keys found."
         return
     fi
-    echo "$KEYS" | awk '{printf "%2d) ID: %-5s Name: %s\n", $1, $2, $3}'
+    echo "$KEYS"
     echo ""
     read -p "Enter key number to extend (or 0 to cancel): " key_num
     if [ "$key_num" -eq 0 ]; then
         return
     fi
-    KEY_ID=$(jq -r '.accessKeys['$((key_num-1))'].id' "$CONFIG_FILE")
-    KEY_NAME=$(jq -r '.accessKeys['$((key_num-1))'].name' "$CONFIG_FILE")
-    if [ -z "$KEY_ID" ]; then
+    KEY_NAME=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $2}')
+    if [ -z "$KEY_NAME" ]; then
         echo "Invalid key number."
         log "Error: Invalid key number $key_num"
         return
     fi
+    KEY_ID=$(jq -r ".accessKeys[] | select(.name == \"$KEY_NAME\") | .id" "$CONFIG_FILE")
+    if [ -z "$KEY_ID" ]; then
+        echo "Error: Key name $KEY_NAME not found."
+        log "Error: Key name $KEY_NAME not found"
+        return
+    fi
     FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
     if [ "$FIRST_USED" = "null" ]; then
-        echo "Key ID: $KEY_ID (Name: $KEY_NAME) has no first_used date set. Please set it first."
-        log "Error: Attempted to extend key ID: $KEY_ID (Name: $KEY_NAME) with no first_used date"
+        echo "Key: $KEY_NAME has no first_used date set. Please set it first."
+        log "Error: Attempted to extend key: $KEY_NAME with no first_used date"
         return
     fi
     CURRENT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
     sudo bash -c "jq \".keys.\\\"$KEY_ID\\\" = {\\\"first_used\\\": \\\"$CURRENT_TIME\\\"}\" \"$TRACKING_FILE\" > tmp.json && mv tmp.json \"$TRACKING_FILE\""
-    echo "Key ID: $KEY_ID (Name: $KEY_NAME) extended with new first used date: $CURRENT_TIME"
-    log "Key ID: $KEY_ID (Name: $KEY_NAME) extended with new first used date: $CURRENT_TIME"
+    echo "Key: $KEY_NAME extended with new first used date: $CURRENT_TIME"
+    log "Key: $KEY_NAME extended with new first used date: $CURRENT_TIME"
 }
 
 # Delete expired keys
@@ -141,8 +151,8 @@ delete_expired_keys() {
                 sudo bash -c "jq \"del(.accessKeys[] | select(.id == \\\"$KEY_ID\\\"))\" \"$CONFIG_FILE\" > tmp.json && mv tmp.json \"$CONFIG_FILE\""
                 sudo bash -c "jq \"del(.keys.\\\"$KEY_ID\\\")\" \"$TRACKING_FILE\" > tmp.json && mv tmp.json \"$TRACKING_FILE\""
                 sudo docker restart "$CONTAINER_NAME" >/dev/null 2>&1
-                echo "Key ID: $KEY_ID (Name: $KEY_NAME) deleted after $DAYS_SINCE days"
-                log "Key ID: $KEY_ID (Name: $KEY_NAME) deleted after $DAYS_SINCE days"
+                echo "Key: $KEY_NAME deleted after $DAYS_SINCE days"
+                log "Key: $KEY_NAME deleted after $DAYS_SINCE days"
             fi
         fi
     done
@@ -154,23 +164,26 @@ list_keys() {
     echo ""
     echo "Access Keys:"
     echo ""
-    KEYS=$(jq -r '.accessKeys[] | "\(.id) \(.name)"' "$CONFIG_FILE")
+    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name' "$CONFIG_FILE")
     if [ -z "$KEYS" ]; then
         echo "No keys found."
         return
     fi
     i=1
-    while IFS=' ' read -r KEY_ID KEY_NAME; do
-        FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
-        if [ "$FIRST_USED" = "null" ]; then
-            echo "$i) ID: $KEY_ID Name: $KEY_NAME (No first_used set)"
-        else
-            FIRST_USED_TIMESTAMP=$(date -d "$FIRST_USED" +%s)
-            CURRENT_TIMESTAMP=$(date +%s)
-            DAYS_SINCE=$(( (CURRENT_TIMESTAMP - FIRST_USED_TIMESTAMP) / 86400 ))
-            echo "$i) ID: $KEY_ID Name: $KEY_NAME (First used: $FIRST_USED, $DAYS_SINCE days ago)"
+    while IFS= read -r KEY_NAME; do
+        if [ -n "$KEY_NAME" ]; then
+            KEY_ID=$(jq -r ".accessKeys[] | select(.name == \"$KEY_NAME\") | .id" "$CONFIG_FILE")
+            FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
+            if [ "$FIRST_USED" = "null" ]; then
+                echo "$i) $KEY_NAME"
+            else
+                FIRST_USED_TIMESTAMP=$(date -d "$FIRST_USED" +%s)
+                CURRENT_TIMESTAMP=$(date +%s)
+                DAYS_SINCE=$(( (CURRENT_TIMESTAMP - FIRST_USED_TIMESTAMP) / 86400 ))
+                echo "$i) $KEY_NAME (First used: $FIRST_USED, $DAYS_SINCE days ago)"
+            fi
+            ((i++))
         fi
-        ((i++))
     done <<< "$KEYS"
     echo ""
 }
