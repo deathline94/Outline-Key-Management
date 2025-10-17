@@ -57,13 +57,13 @@ setup_cron() {
 set_first_used() {
     echo ""
     echo "Available keys:"
-    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name + " " + (.id | tostring)' "$CONFIG_FILE")
+    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name + "|" + (.id | tostring)' "$CONFIG_FILE")
     if [ -z "$KEYS" ]; then
         echo "No keys found."
         return
     fi
     i=1
-    while IFS=' ' read -r KEY_NAME KEY_ID; do
+    while IFS='|' read -r KEY_NAME KEY_ID; do
         if [ -n "$KEY_NAME" ]; then
             FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
             if [ "$FIRST_USED" = "null" ]; then
@@ -79,11 +79,14 @@ set_first_used() {
     done <<< "$KEYS"
     echo ""
     read -p "Enter key number to set first used (or 0 to cancel): " key_num
-    if [ "$key_num" -eq 0 ]; then
+    if [[ ! "$key_num" =~ ^[0-9]+$ ]] || [ "$key_num" -eq 0 ]; then
         return
     fi
-    KEY_NAME=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $1}')
-    KEY_ID=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $2}')
+    
+    SELECTED_KEY_LINE=$(echo "$KEYS" | sed -n "${key_num}p")
+    KEY_NAME=$(echo "$SELECTED_KEY_LINE" | cut -d'|' -f1)
+    KEY_ID=$(echo "$SELECTED_KEY_LINE" | cut -d'|' -f2)
+
     if [ -z "$KEY_NAME" ] || [ -z "$KEY_ID" ]; then
         echo "Invalid key number."
         log "Error: Invalid key number $key_num"
@@ -105,13 +108,13 @@ set_first_used() {
 extend_key() {
     echo ""
     echo "Available keys:"
-    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name + " " + (.id | tostring)' "$CONFIG_FILE")
+    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name + "|" + (.id | tostring)' "$CONFIG_FILE")
     if [ -z "$KEYS" ]; then
         echo "No keys found."
         return
     fi
     i=1
-    while IFS=' ' read -r KEY_NAME KEY_ID; do
+    while IFS='|' read -r KEY_NAME KEY_ID; do
         if [ -n "$KEY_NAME" ]; then
             FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
             if [ "$FIRST_USED" = "null" ]; then
@@ -127,11 +130,14 @@ extend_key() {
     done <<< "$KEYS"
     echo ""
     read -p "Enter key number to extend (or 0 to cancel): " key_num
-    if [ "$key_num" -eq 0 ]; then
+    if [[ ! "$key_num" =~ ^[0-9]+$ ]] || [ "$key_num" -eq 0 ]; then
         return
     fi
-    KEY_NAME=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $1}')
-    KEY_ID=$(echo "$KEYS" | sed -n "${key_num}p" | awk '{print $2}')
+
+    SELECTED_KEY_LINE=$(echo "$KEYS" | sed -n "${key_num}p")
+    KEY_NAME=$(echo "$SELECTED_KEY_LINE" | cut -d'|' -f1)
+    KEY_ID=$(echo "$SELECTED_KEY_LINE" | cut -d'|' -f2)
+
     if [ -z "$KEY_NAME" ] || [ -z "$KEY_ID" ]; then
         echo "Invalid key number."
         log "Error: Invalid key number $key_num"
@@ -182,15 +188,14 @@ list_keys() {
     echo ""
     echo "Access Keys:"
     echo ""
-    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name' "$CONFIG_FILE")
+    KEYS=$(jq -r '.accessKeys[] | select(.name != "") | .name + "|" + .id' "$CONFIG_FILE")
     if [ -z "$KEYS" ]; then
         echo "No keys found."
         return
     fi
     i=1
-    while IFS= read -r KEY_NAME; do
+    while IFS='|' read -r KEY_NAME KEY_ID; do
         if [ -n "$KEY_NAME" ]; then
-            KEY_ID=$(jq -r ".accessKeys[] | select(.name == \"$KEY_NAME\") | .id" "$CONFIG_FILE")
             FIRST_USED=$(jq -r ".keys.\"$KEY_ID\".first_used // \"null\"" "$TRACKING_FILE")
             if [ "$FIRST_USED" = "null" ]; then
                 echo "$i) $KEY_NAME"
